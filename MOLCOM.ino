@@ -64,6 +64,8 @@ void setup() {
 }
 
 void loop() {
+  // Code block for the Geolocation sensor
+  
    while(Serial1.available()){ // check for gps data
     if(gps.encode(Serial1.read()))// encode gps data
     { 
@@ -80,6 +82,8 @@ void loop() {
       lcd.print("Longitude:");
       lcd.setCursor(11,3);
       lcd.print(lon,6);
+
+      
      
    }
   }
@@ -261,11 +265,7 @@ void entry(){
     
     }
 
-  void bearing_setter(){
-    
-    
-    
-    }
+ 
 
    void initial_eeprom_clearing(){
     // Function for initially clearing the EEPROM memory
