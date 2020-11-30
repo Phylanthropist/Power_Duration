@@ -14,8 +14,12 @@
 #include <LiquidCrystal.h>
 #include <Keypad.h>
 #include <EEPROM.h>
+#include <TinyGPS.h>
 
-
+//Setting the parameter of the geolocation sensor
+// Rx and Tx of GPS Sensor to the 18(Tx) and 19(Rx) of the Arduino
+float lat, lon;
+TinyGPS gps;
 // setting the parameters for the keypad
 const int Size = 6;
 char special_keys[Size] = {'A','B','C','D','*','#'};
@@ -45,6 +49,7 @@ void setup() {
   // set up the LCD's number of columns and rows:
   //initial_eeprom_clearing();
   lcd.begin(20, 4);
+  Serial1.begin(9600);
   // Print a welcome message to the screen, displaying the company name and the name of the project
   lcd.print("MOLCOM MULTICONCEPTS");
   lcd.setCursor(2,1);
@@ -54,12 +59,30 @@ void setup() {
   delay(3000);
   lcd.clear();
   check_meter_no_eeprom();
-  
-  
+  delay(1000);
+  loop();
 }
 
 void loop() {
- 
+   while(Serial1.available()){ // check for gps data
+    if(gps.encode(Serial1.read()))// encode gps data
+    { 
+    gps.f_get_position(&lat,&lon); // get latitude and longitude
+
+    lcd.setCursor(0,2);
+    lcd.print("Latitude:");
+    lcd.setCursor(10,2);
+    lcd.print(lat,6);
+   
+    
+    //Longitude
+      lcd.setCursor(0,3);
+      lcd.print("Longitude:");
+      lcd.setCursor(11,3);
+      lcd.print(lon,6);
+     
+   }
+  }
  
 }
 
@@ -76,11 +99,10 @@ void check_meter_no_eeprom(){
       lcd.print(holder);
       lcd.setCursor(0,1);
       lcd.print("Bearing Location");
-      lcd.setCursor(0,2);
-      lcd.print("Longitude:");
-      lcd.setCursor(0,3);
-      lcd.print("Latitude:");
+       
       }
+      
+      
      else{
       lcd.setCursor(1,0);
       lcd.print("NO METER NUMBER");
@@ -91,6 +113,8 @@ void check_meter_no_eeprom(){
       }
     }
 
+
+
  void warning_signal(){ 
       // Initial warning that the meter no has to be a valid number and not a character.
       lcd.setCursor(4, 1);
@@ -100,9 +124,8 @@ void check_meter_no_eeprom(){
       lcd.setCursor(0,3);  
       lcd.print("NUMERAL NOT ALPHABET");
       }
- 
 
-void set_meter_no() {
+  void set_meter_no() {
   //Enter the meter_no here
   lcd.clear();
   lcd.setCursor(0,0);
@@ -111,6 +134,9 @@ void set_meter_no() {
   lcd.print("ENTER METER_NO:");
   enter_num();
   }
+  
+ 
+
 
 
 void enter_num(){
@@ -234,7 +260,13 @@ void entry(){
       lcd.print("METER_NO");
     
     }
-  
+
+  void bearing_setter(){
+    
+    
+    
+    }
+
    void initial_eeprom_clearing(){
     // Function for initially clearing the EEPROM memory
     for(int i = 0 ; i < EEPROM.length() ; i++){
