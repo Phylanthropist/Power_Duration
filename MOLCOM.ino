@@ -16,11 +16,16 @@
 #include <Keypad.h>
 #include <EEPROM.h>
 #include <TinyGPS.h>
+#include <SPI.h>
+#include <SD.h>
 
 
 //initializing the RTC 
 RTC_DS1307 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+
+// setting the pin for the ChipSelect
+const int chipSelect = 53;
 
 //Setting the parameter of the geolocation sensor
 // Rx and Tx of GPS Sensor to the 18(Tx) and 19(Rx) of the Arduino
@@ -29,13 +34,14 @@ TinyGPS gps;
 // setting the parameters for the keypad
 const int Size = 6;
 char special_keys[Size] = {'A','B','C','D','*','#'};
-String year_h, month_h, day_h, holder_h;
-String year_i, month_i, day_i, holder_i;
+String year_final, month_final, day_final, hour_final, minute_final, final_duration;
+String year_initial, month_initial, day_initial, hour_initial, minute_initial, initial_duration;
 char meter_no[11];
+int count = 0;
+String time_power_keeper;
+int count_holder; // This variable holds the value of the count at any time there is loss of power, so that a memory continual recounting can be done.
 byte valu;
-char holder[11];
-int count = 0; // Holds the count time for power duration.
-int count_holder = 0; // This variable holds the value of the count at any time there is loss of power, so that a memory continual recounting can be done.
+char holder[11]; 
 char meter_no_confirm[11];
 const byte ROWS = 4; //four rows
 const byte COLS = 4; //three columns
@@ -61,16 +67,17 @@ LiquidCrystal lcd(7, 8, 9, 10, 11, 12);  // RS,EN,D4,D5,D6,D7
 int Yphase_pin = A8;
 int Rphase_pin = A9;
 int Bphase_pin = A10;
-int buzzer_pin = 5;// The buzzer pin is the output pin
 
-char dateday_holder; // Variable for holding the day and the date for a particular day
+File myFile; // Create a Directory in the Mscard where the data will be stored
 
 void setup() {
-  Serial1.begin(9600);
+  Serial.begin(9600);
+  SD.begin();
+  //Serial1.begin(9600);
   pinMode(Yphase_pin, INPUT);
   pinMode(Rphase_pin, INPUT);
   pinMode(Bphase_pin, INPUT);
-  pinMode(buzzer_pin, OUTPUT);
+
   
   // set up the LCD's number of columns and rows:
   //initial_eeprom_clearing();
@@ -95,24 +102,24 @@ void setup() {
 void loop() {
   // Code block for the Geolocation sensor
   
-   while(Serial1.available()){ // check for gps data
-    if(gps.encode(Serial1.read()))// encode gps data
-    { 
-    gps.f_get_position(&lat,&lon); // get latitude and longitude
-    
-    //Latitude
-    lcd.setCursor(0,2);
-    lcd.print("Latitude:");
-    lcd.setCursor(10,2);
-    lcd.print(lat,6);
-    
-    //Longitude
-    lcd.setCursor(0,3);
-    lcd.print("Longitude:");
-    lcd.setCursor(11,3);
-    lcd.print(lon,6);
-   }
-  }
+//   while(Serial1.available()){ // check for gps data
+//    if(gps.encode(Serial1.read()))// encode gps data
+//    { 
+//    gps.f_get_position(&lat,&lon); // get latitude and longitude
+//    
+//    //Latitude
+//    lcd.setCursor(0,2);
+//    lcd.print("Latitude:");
+//    lcd.setCursor(10,2);
+//    lcd.print(lat,6);
+//    
+//    //Longitude
+//    lcd.setCursor(0,3);
+//    lcd.print("Longitude:");
+//    lcd.setCursor(11,3);
+//    lcd.print(lon,6);
+//   }
+//  }
   /* SEQUENCE OF OPERATION FROM THIS POINT
     * If a high is detected in any of the three(3) phases then using a OR logic, activate the buzzer for 1000ms and deactivate
     * create a variable that will hold the date, and day of the week
@@ -127,11 +134,15 @@ void loop() {
 }
 void check_current_date_per_day(){
   DateTime now = rtc.now();
-  year_i= now.year();
-  month_i = now.month();
-  day_i = now.day();
-  holder_i = year_i.concat(month_i.concat(day_i));
-  
+  year_initial= now.year();
+  month_initial = now.month();
+  day_initial = now.day();
+  hour_initial = now.hour();
+  minute_initial = now.minute();
+  initial_duration = year_initial+month_initial+day_initial+hour_initial+minute_initial;
+  lcd.setCursor(0,0);
+  lcd.print(initial_duration);
+  delay(2000);
 }
 
 void check_meter_no_eeprom(){
@@ -302,44 +313,107 @@ void entry(){
 
   void RYB_Phase_checker(){
     // This method checks the 3 phases for power 
-    
-    if ((digitalRead(Yphase_pin) == HIGH) || (digitalRead(Bphase_pin) == HIGH) || (digitalRead(Rphase_pin) == HIGH)){
+    if (digitalRead(Yphase_pin) == HIGH || digitalRead(Rphase_pin) == HIGH || digitalRead(Bphase_pin) == HIGH){
+      activate_rtc();
+      if(final_duration == initial_duration){
       count_holder = count++;
-      activate_rtc(); // i have to store this value once.
-      if(holder_h != holder_i){
-        /* Once there is power and the date stored is not equal, that means we have entered a new day
-         * make the count = 0, to restart for the next day,
-         * push the date and count_holder value into the EEPROM, Mscard, and send using the GSM module
-         * we have the get the new date to use as a checking parameter, against the looping date
-         * reinitialize count_holder = 0, for a new day.
-        */
-       count = 0;
-       
-        }
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print(count_holder);
+      delay(1000);
       } 
+      else{
+        // the else statement means that they are not equal, that means we have entered a new day, and count and count_holder has to be reinitialized back to 0
+        count_holder;
+        // Concatenate the DATE and the power duration recorded as comma separated string
+        time_power_keeper = (initial_duration + "," + count_holder);
+        lcd.setCursor(0,1);
+        lcd.print(time_power_keeper);  // I did this just for visual presentation on the LCD.
+        save_MScard();
+        delay(2000);
+        save_exEEPROM();
+        send_data_toServer();
+        initial_duration = final_duration;
+        count = 0;
+        count_holder = 0;
+        lcd.setCursor(0,3);
+        lcd.print(initial_duration);
+        delay(2000);
+        }
 
-     else if ((digitalRead(Yphase_pin) == LOW) || (digitalRead(Bphase_pin) == LOW) || (digitalRead(Rphase_pin) == LOW)){
+    }
+
+     else{
       /* Check if the we are still in the same day
        *  if we are still on the same day, take the value of the count_holder store and maintain it.
        *  if we have entered another day reintialize the count_holder to be equal to 0, likewise the count
        *  store the count_holder and the day to the EEPROM and MScard and likewise send the information
       */
       }
+      
     
     }
+
 
  void activate_rtc(){
   // Get the day when the 3phases pin were high
   // create a variable to hold the string or character for the day whatever be the content of this variable will be checked against the value of the RTC each time.
   DateTime now = rtc.now();
   // We only need the day, month and year from the RTC for our problem. Hence i will leave behind the time section
-  year_h = now.year();
-  month_h = now.month();
-  day_h = now.day();
-  holder_h = year_h.concat(month_h.concat(day_h));
+  year_final = now.year();
+  month_final = now.month();
+  day_final = now.day();
+  hour_final = now.hour();
+  minute_final = now.minute();
+  final_duration = year_final+month_final+day_final+hour_final+minute_final;
   
   // The variable holder will then be stored in the External EEPROM.
-  // I will always compare the content of holder_i  to what the RTC gives at a particular instance that is holder_h.
+  // I will always compare the content of holder_i  to what the RTC gives at a particular instance that is holder
+  }
+
+  void save_MScard(){
+    lcd.setCursor(0,2);
+    lcd.print("I AM ON THE SD-CARD");
+    // Save the count and the time to the MScard.
+    myFile = SD.open("test.txt", FILE_WRITE);
+    
+    // If file is open write to it
+    if(myFile){
+      Serial.println("Writing to test.txt...");
+      time_power_keeper = (initial_duration + "," + count_holder);
+      myFile.println(time_power_keeper); // time_power_keeper is a string of data that needs to be written to the sd card.
+      // close the file after writing to it
+      myFile.close();
+      Serial.print("done");
+    }
+    else{
+      Serial.print("File not open");
+      }
+
+    myFile = SD.open("test.txt");
+    if(myFile){
+      Serial.print("test.txt");
+
+      while(myFile.available()){
+        Serial.write(myFile.read());
+      }
+      myFile.close();
+    }
+    
+  }
+
+
+  void save_exEEPROM(){
+    // Here we save the concatenated data to an External EEPROM
+    
+  }
+
+
+  void send_data_toServer(){
+    // This function is used in sending the data to a central server using the GSM/GPRS module
+
+
+    
   }
 
   
@@ -353,6 +427,7 @@ void entry(){
    /* MODIFICATIONS
     *  Put a code that will check if the EEPROM is initially filled with any value that is not the meter no, if so clear the EEPROM memory
     *  Configure a key that will clear the input by a step backward.
+    *  A function that takes the second recorded and convert into an hour, minute depending.
    
    */
    
