@@ -19,7 +19,13 @@
 #include <SPI.h>
 #include <SD.h>
 
+//initializing the external EEPROM
 
+#define EEPROM_address 0x50
+unsigned int eepromAdd = 0;
+char newStr[18];
+byte i;
+int lastIndex = 0;
 //initializing the RTC 
 RTC_DS1307 rtc;
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
@@ -73,6 +79,7 @@ File myFile; // Create a Directory in the Mscard where the data will be stored
 void setup() {
   Serial.begin(9600);
   SD.begin();
+  Wire.begin();
   //Serial1.begin(9600);
   pinMode(Yphase_pin, INPUT);
   pinMode(Rphase_pin, INPUT);
@@ -92,7 +99,7 @@ void setup() {
   lcd.print("DURATION");
   delay(3000);
   lcd.clear();
-  check_current_date_per_day();
+  get_initial_time();
   check_meter_no_eeprom();
   // Immediately the system starts get the time and store in a variable
   delay(1000);
@@ -100,6 +107,7 @@ void setup() {
 }
 
 void loop() {
+  get_USB_query();
   // Code block for the Geolocation sensor
   
 //   while(Serial1.available()){ // check for gps data
@@ -130,9 +138,11 @@ void loop() {
     * Send the data in the EEPROM immediately to the server via the GSM/GPRS module.
    */
    RYB_Phase_checker();
- 
 }
-void check_current_date_per_day(){
+
+
+  void get_initial_time(){
+  
   DateTime now = rtc.now();
   year_initial= now.year();
   month_initial = now.month();
@@ -143,6 +153,7 @@ void check_current_date_per_day(){
   lcd.setCursor(0,0);
   lcd.print(initial_duration);
   delay(2000);
+ 
 }
 
 void check_meter_no_eeprom(){
@@ -320,7 +331,7 @@ void entry(){
       lcd.clear();
       lcd.setCursor(0,0);
       lcd.print(count_holder);
-      delay(1000);
+      delay(900);
       } 
       else{
         // the else statement means that they are not equal, that means we have entered a new day, and count and count_holder has to be reinitialized back to 0
@@ -329,10 +340,33 @@ void entry(){
         time_power_keeper = (initial_duration + "," + count_holder);
         lcd.setCursor(0,1);
         lcd.print(time_power_keeper);  // I did this just for visual presentation on the LCD.
+
+                          // SAVING DATA TO THE MICR0-SDCARD
+                             
         save_MScard();
-        delay(2000);
-        save_exEEPROM();
+        delay(500);
+      
+                          // WRITING DATA TO THE EEPROM
+                          
+        int data_length = lastIndex + time_power_keeper.length();
+        for(int i = lastIndex, j = 0 ; i < data_length; i++, j++){
+          int retAddr = writeEEPROM(EEPROM_address, eepromAdd+i, time_power_keeper[i]);
+          lastIndex = retAddr+1;
+        } 
+        Serial.print(lastIndex);
+
+                          // READING DATA FROM THE EEPROM
+        
+        for(int j = 0 ; j < ; j++)
+        newStr[j] = readEEPROM(EEPROM_address, j);
+        Serial.print("Duration of power");
+        Serial.print(newStr);
+        delay(1000);
+                         // SENDING DATA TO THE SERVER OR MOBILE NUMBER
+                         
         send_data_toServer();
+        
+                        // REINITIALIZING VARIABLES AND LCD PRINTING
         initial_duration = final_duration;
         count = 0;
         count_holder = 0;
@@ -343,17 +377,7 @@ void entry(){
 
     }
 
-     else{
-      /* Check if the we are still in the same day
-       *  if we are still on the same day, take the value of the count_holder store and maintain it.
-       *  if we have entered another day reintialize the count_holder to be equal to 0, likewise the count
-       *  store the count_holder and the day to the EEPROM and MScard and likewise send the information
-      */
-      }
-      
-    
     }
-
 
  void activate_rtc(){
   // Get the day when the 3phases pin were high
@@ -403,31 +427,45 @@ void entry(){
   }
 
 
-  void save_exEEPROM(){
+  int writeEEPROM(int deviceaddress,unsigned int eeaddress , byte duration_data ){
     // Here we save the concatenated data to an External EEPROM
-    
+    //convert_string_to_char(datan);
+    Wire.beginTransmission(deviceaddress);
+    Wire.write((byte)(eeaddress >> 8)); // MSB
+    Wire.write((byte)(eeaddress & 0xFF)); // LSB
+    Wire.write(duration_data);
+    Wire.endTransmission();
+    return eeaddress;
+    delay(5);
   }
 
+  byte readEEPROM(int deviceaddress, unsigned int eeaddress){
+    byte readByte = 0;
+    Wire.beginTransmission(deviceaddress);
+    Wire.write((int)(eeaddress >> 8)); // MSB
+    Wire.write((int)(eeaddress & 0xFF)); // LSB
+    Wire.endTransmission();
+    Wire.requestFrom(deviceaddress, 1); // The 1 here means read a byte
+    if(Wire.available())
+      readByte = Wire.read();
+    return readByte;
+  }
 
   void send_data_toServer(){
     // This function is used in sending the data to a central server using the GSM/GPRS module
 
-
-    
   }
 
-  
-   void initial_eeprom_clearing(){
-    // Function for initially clearing the EEPROM memory
-    for(int i = 0 ; i < EEPROM.length() ; i++){
-      EEPROM.write(i,0);
-      }
+ void initial_eeprom_clearing(){
+  // Function for initially clearing the EEPROM memory
+  for(int i = 0 ; i < EEPROM.length() ; i++){
+    EEPROM.write(i,0);
     }
+  }
 
-   /* MODIFICATIONS
-    *  Put a code that will check if the EEPROM is initially filled with any value that is not the meter no, if so clear the EEPROM memory
-    *  Configure a key that will clear the input by a step backward.
-    *  A function that takes the second recorded and convert into an hour, minute depending.
-   
-   */
-   
+/* MODIFICATIONS
+*  Put a code that will check if the EEPROM is initially filled with any value that is not the meter no, if so clear the EEPROM memory
+*  Configure a key that will clear the input by a step backward.
+*  A function that takes the second recorded and convert into an hour, minute depending.
+
+*/
