@@ -18,10 +18,13 @@
 #include <TinyGPS.h>
 #include <SPI.h>
 #include <SD.h>
+#include <SoftwareSerial.h>
 
 //initializing the external EEPROM
 
 #define EEPROM_address 0x50
+#define rxpin 10
+#define txpin 11
 unsigned int eepromAdd = 0;
 char newStr[18];
 byte i;
@@ -63,10 +66,10 @@ byte colPins[COLS] = {A4, A5, A6, A7}; //connect to the column C1-C4 pinouts of 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 
+SoftwareSerial mySerial(rxpin, txpin); // Rx and Tx
 //setting parameters for the LCD
 // Since I will be writing to the LCD the RW pin need not be grounded.
-LiquidCrystal lcd(7, 8, 9, 10, 11, 12);  // RS,EN,D4,D5,D6,D7
-
+LiquidCrystal lcd(3, 4, 5, 6, 7, 8);  // RS,EN,D4,D5,D6,D7
 
 // Setting the pinmode for the Red, Yellow and Blue phases. These three pins are Inputs
 
@@ -74,10 +77,12 @@ int Yphase_pin = A8;
 int Rphase_pin = A9;
 int Bphase_pin = A10;
 
-File myFile; // Create a Directory in the Mscard where the data will be stored
+File myFile, myFile_2; // Create a Directory in the Mscard where the data will be stored
 
 void setup() {
   Serial.begin(9600);
+  Serial1.begin(9600);
+  mySerial.begin(9600);
   SD.begin();
   Wire.begin();
   //Serial1.begin(9600);
@@ -102,32 +107,12 @@ void setup() {
   get_initial_time();
   check_meter_no_eeprom();
   // Immediately the system starts get the time and store in a variable
-  delay(1000);
+  get_geolocation();
   loop();
 }
 
 void loop() {
-  get_USB_query();
   // Code block for the Geolocation sensor
-  
-//   while(Serial1.available()){ // check for gps data
-//    if(gps.encode(Serial1.read()))// encode gps data
-//    { 
-//    gps.f_get_position(&lat,&lon); // get latitude and longitude
-//    
-//    //Latitude
-//    lcd.setCursor(0,2);
-//    lcd.print("Latitude:");
-//    lcd.setCursor(10,2);
-//    lcd.print(lat,6);
-//    
-//    //Longitude
-//    lcd.setCursor(0,3);
-//    lcd.print("Longitude:");
-//    lcd.setCursor(11,3);
-//    lcd.print(lon,6);
-//   }
-//  }
   /* SEQUENCE OF OPERATION FROM THIS POINT
     * If a high is detected in any of the three(3) phases then using a OR logic, activate the buzzer for 1000ms and deactivate
     * create a variable that will hold the date, and day of the week
@@ -138,7 +123,30 @@ void loop() {
     * Send the data in the EEPROM immediately to the server via the GSM/GPRS module.
    */
    RYB_Phase_checker();
+   delay(100);
 }
+
+  void get_geolocation(){
+    while(Serial1.available()){ // check for gps data
+    if(gps.encode(Serial1.read()))// encode gps data
+    { 
+    gps.f_get_position(&lat,&lon); // get latitude and longitude
+    
+    //Latitude
+    lcd.setCursor(0,2);
+    lcd.print("Latitude:");
+    lcd.setCursor(10,2);
+    lcd.print(lat,6);
+    
+    //Longitude
+    lcd.setCursor(0,3);
+    lcd.print("Longitude:");
+    lcd.setCursor(11,3);
+    lcd.print(lon,6);
+   }
+  }
+    
+    }
 
 
   void get_initial_time(){
@@ -149,7 +157,7 @@ void loop() {
   day_initial = now.day();
   hour_initial = now.hour();
   minute_initial = now.minute();
-  initial_duration = year_initial+month_initial+day_initial+hour_initial+minute_initial;
+  initial_duration = year_initial+"/"+month_initial+"/"+day_initial; //hour_initial+minute_initial;
   lcd.setCursor(0,0);
   lcd.print(initial_duration);
   delay(2000);
@@ -183,12 +191,14 @@ void check_meter_no_eeprom(){
 
  void warning_signal(){ 
       // Initial warning that the meter no has to be a valid number and not a character.
-      lcd.setCursor(4, 1);
-      lcd.print("WARNING !!!");
-      lcd.setCursor(2,2);
-      lcd.print("METER NUMBERS ARE");
-      lcd.setCursor(0,3);  
-      lcd.print("NUMERAL NOT ALPHABET");
+      lcd.setCursor(1, 0);
+      lcd.print("ENTER METER_NO");
+      lcd.setCursor(2,1);
+      lcd.print("METER_N0 MUST BE");
+      lcd.setCursor(0,2);  
+      lcd.print("NUMERAL, NO ALPHABET");
+      lcd.setCursor(0, 4);
+      lcd.print("NO MUST BE 11 DIGITS");
       }
 
   void set_meter_no() {
@@ -252,11 +262,6 @@ void entry(){
           set_meter_no();
           
           }
-          else if(key=='C'){
-            lcd.setCursor(col,row);
-            col =col-1;
-            
-            }
           }
        }
       }
@@ -329,7 +334,11 @@ void entry(){
       if(final_duration == initial_duration){
       count_holder = count++;
       lcd.clear();
-      lcd.setCursor(0,0);
+      lcd.setCursor(0,1);
+      lcd.print("Power availability");
+      lcd.setCursor(0,2);
+      lcd.print("Time(s) = ");
+      lcd.setCursor(10,2);
       lcd.print(count_holder);
       delay(900);
       } 
@@ -337,7 +346,7 @@ void entry(){
         // the else statement means that they are not equal, that means we have entered a new day, and count and count_holder has to be reinitialized back to 0
         count_holder;
         // Concatenate the DATE and the power duration recorded as comma separated string
-        time_power_keeper = (initial_duration + "," + count_holder);
+        time_power_keeper = ("D:" + initial_duration + " " +"T(s)" + count_holder);
         lcd.setCursor(0,1);
         lcd.print(time_power_keeper);  // I did this just for visual presentation on the LCD.
 
@@ -357,11 +366,11 @@ void entry(){
 
                           // READING DATA FROM THE EEPROM
         
-        for(int j = 0 ; j < ; j++)
-        newStr[j] = readEEPROM(EEPROM_address, j);
-        Serial.print("Duration of power");
-        Serial.print(newStr);
-        delay(1000);
+//        for(int j = 0 ; j < ; j++)
+//        newStr[j] = readEEPROM(EEPROM_address, j);
+//        Serial.print("Duration of power");
+//        Serial.print(newStr);
+//        delay(1000);
                          // SENDING DATA TO THE SERVER OR MOBILE NUMBER
                          
         send_data_toServer();
@@ -389,22 +398,22 @@ void entry(){
   day_final = now.day();
   hour_final = now.hour();
   minute_final = now.minute();
-  final_duration = year_final+month_final+day_final+hour_final+minute_final;
+  final_duration = year_final+"/"+month_final+"/"+day_final ; //+hour_final+minute_final;
   
   // The variable holder will then be stored in the External EEPROM.
   // I will always compare the content of holder_i  to what the RTC gives at a particular instance that is holder
   }
 
   void save_MScard(){
-    lcd.setCursor(0,2);
-    lcd.print("I AM ON THE SD-CARD");
+    lcd.setCursor(4,2);
+    lcd.print("SAVING DATA");
     // Save the count and the time to the MScard.
     myFile = SD.open("test.txt", FILE_WRITE);
     
     // If file is open write to it
     if(myFile){
       Serial.println("Writing to test.txt...");
-      time_power_keeper = (initial_duration + "," + count_holder);
+      time_power_keeper = ("D:" + initial_duration + " " +"T(s)" + count_holder);
       myFile.println(time_power_keeper); // time_power_keeper is a string of data that needs to be written to the sd card.
       // close the file after writing to it
       myFile.close();
@@ -414,16 +423,16 @@ void entry(){
       Serial.print("File not open");
       }
 
-    myFile = SD.open("test.txt");
-    if(myFile){
-      Serial.print("test.txt");
-
-      while(myFile.available()){
-        Serial.write(myFile.read());
-      }
-      myFile.close();
-    }
-    
+//    myFile = SD.open("test.txt");
+//    if(myFile){
+//      Serial.print("test.txt");
+//
+//      while(myFile.available()){
+//        Serial.write(myFile.read());
+//      }
+//      myFile.close();
+//    }
+//    
   }
 
 
@@ -439,23 +448,48 @@ void entry(){
     delay(5);
   }
 
-  byte readEEPROM(int deviceaddress, unsigned int eeaddress){
-    byte readByte = 0;
-    Wire.beginTransmission(deviceaddress);
-    Wire.write((int)(eeaddress >> 8)); // MSB
-    Wire.write((int)(eeaddress & 0xFF)); // LSB
-    Wire.endTransmission();
-    Wire.requestFrom(deviceaddress, 1); // The 1 here means read a byte
-    if(Wire.available())
-      readByte = Wire.read();
-    return readByte;
-  }
+//  byte readEEPROM(int deviceaddress, unsigned int eeaddress){
+//    byte readByte = 0;
+//    Wire.beginTransmission(deviceaddress);
+//    Wire.write((int)(eeaddress >> 8)); // MSB
+//    Wire.write((int)(eeaddress & 0xFF)); // LSB
+//    Wire.endTransmission();
+//    Wire.requestFrom(deviceaddress, 1); // The 1 here means read a byte
+//    if(Wire.available())
+//      readByte = Wire.read();
+//    return readByte;
+//  }
 
   void send_data_toServer(){
     // This function is used in sending the data to a central server using the GSM/GPRS module
+   //  It will send the meter_no, the location and the reading for each day
 
-  }
+    Serial.println("Sending Message");
+   
+    mySerial.print("AT+CMGF=1\r");
+    delay(100);
+    mySerial.println("AT+CMGS=\"+2348163944365\"");
+    // Retrieve the meter number here, location and power duration here as the SMS to be sent
+                        // RETRIEVING THE METER_NO
+    for(int address = 0; address < 11; address++){
+     valu = EEPROM.read(address);
+     holder[address] = valu;
+    }
+    mySerial.print("Meter_no: ");
+    mySerial.println(meter_no[11]);
+    mySerial.print("Duration: ");
+    mySerial.println(time_power_keeper);
+    mySerial.print("Long & Lat: ");
+    mySerial.println(lon, lat);
+    delay(100);
+    mySerial.println((char)26);
+    delay(100);
+    mySerial.println();
+    delay(5000);
 
+    Serial.println("Message Sent");
+    }
+  
  void initial_eeprom_clearing(){
   // Function for initially clearing the EEPROM memory
   for(int i = 0 ; i < EEPROM.length() ; i++){
