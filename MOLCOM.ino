@@ -81,7 +81,7 @@ File myFile, myFile_2; // Create a Directory in the Mscard where the data will b
 
 void setup() {
   Serial.begin(9600);
-  Serial1.begin(9600);
+  Serial3.begin(9600);
   mySerial.begin(9600);
   SD.begin();
   Wire.begin();
@@ -107,7 +107,8 @@ void setup() {
   get_initial_time();
   check_meter_no_eeprom();
   // Immediately the system starts get the time and store in a variable
-  get_geolocation();
+  delay(1000);
+  lcd.clear();
   loop();
 }
 
@@ -122,26 +123,27 @@ void loop() {
     * After that set back the counter variable to integer 0 and the date or day variable to an empty string.
     * Send the data in the EEPROM immediately to the server via the GSM/GPRS module.
    */
+   get_geolocation();
    RYB_Phase_checker();
    delay(100);
 }
 
   void get_geolocation(){
-    while(Serial1.available()){ // check for gps data
-    if(gps.encode(Serial1.read()))// encode gps data
+    while(Serial3.available()){ // check for gps data
+    if(gps.encode(Serial3.read()))// encode gps data
     { 
     gps.f_get_position(&lat,&lon); // get latitude and longitude
     
     //Latitude
-    lcd.setCursor(0,2);
+    lcd.setCursor(0,0);
     lcd.print("Latitude:");
-    lcd.setCursor(10,2);
+    lcd.setCursor(10,0);
     lcd.print(lat,6);
     
     //Longitude
-    lcd.setCursor(0,3);
+    lcd.setCursor(0,1);
     lcd.print("Longitude:");
-    lcd.setCursor(11,3);
+    lcd.setCursor(11,1);
     lcd.print(lon,6);
    }
   }
@@ -157,10 +159,11 @@ void loop() {
   day_initial = now.day();
   hour_initial = now.hour();
   minute_initial = now.minute();
-  initial_duration = year_initial+"/"+month_initial+"/"+day_initial; //hour_initial+minute_initial;
+  initial_duration = year_initial+"/"+month_initial+"/"+day_initial + ":"+ hour_initial; //+minute_initial;
   lcd.setCursor(0,0);
-  lcd.print(initial_duration);
+  lcd.print("Date : " + initial_duration);
   delay(2000);
+  lcd.clear();
  
 }
 
@@ -175,8 +178,8 @@ void check_meter_no_eeprom(){
       lcd.print("Meter_no:");
       lcd.setCursor(9,0);
       lcd.print(holder);
-      lcd.setCursor(0,1);
-      lcd.print("Bearing Location");
+//      lcd.setCursor(0,1);
+//      lcd.print("Bearing Location");
        
       }
      else{
@@ -333,12 +336,11 @@ void entry(){
       activate_rtc();
       if(final_duration == initial_duration){
       count_holder = count++;
-      lcd.clear();
-      lcd.setCursor(0,1);
-      lcd.print("Power availability");
       lcd.setCursor(0,2);
+      lcd.print("Power availability");
+      lcd.setCursor(0,3);
       lcd.print("Time(s) = ");
-      lcd.setCursor(10,2);
+      lcd.setCursor(10,3);
       lcd.print(count_holder);
       delay(900);
       } 
@@ -398,7 +400,7 @@ void entry(){
   day_final = now.day();
   hour_final = now.hour();
   minute_final = now.minute();
-  final_duration = year_final+"/"+month_final+"/"+day_final ; //+hour_final+minute_final;
+  final_duration = year_final+"/"+month_final+"/"+day_final + ":"+ hour_final; // +minute_final;
   
   // The variable holder will then be stored in the External EEPROM.
   // I will always compare the content of holder_i  to what the RTC gives at a particular instance that is holder
@@ -423,16 +425,16 @@ void entry(){
       Serial.print("File not open");
       }
 
-//    myFile = SD.open("test.txt");
-//    if(myFile){
-//      Serial.print("test.txt");
-//
-//      while(myFile.available()){
-//        Serial.write(myFile.read());
-//      }
-//      myFile.close();
-//    }
-//    
+    myFile = SD.open("test.txt");
+    if(myFile){
+      Serial.print("test.txt");
+
+      while(myFile.available()){
+        Serial.write(myFile.read());
+      }
+      myFile.close();
+    }
+    
   }
 
 
